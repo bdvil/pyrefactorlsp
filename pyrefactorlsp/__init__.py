@@ -1,11 +1,12 @@
-import logging
-from pathlib import Path
+from .config import Config, load_config
+from .constants import LOGGER, LOGGING_LEVEL, PROJECT_DIR
+from .version import __version__
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-LOGGING_LEVEL = logging.DEBUG
-LOGGER = logging.getLogger("pyrefactorlsp")
-
-handler = logging.StreamHandler()
-handler.setLevel(LOGGING_LEVEL)
-LOGGER.setLevel(LOGGING_LEVEL)
-LOGGER.addHandler(handler)
+__all__ = [
+    "PROJECT_DIR",
+    "LOGGING_LEVEL",
+    "LOGGER",
+    "Config",
+    "load_config",
+    "__version__",
+]

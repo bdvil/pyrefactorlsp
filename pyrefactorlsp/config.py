@@ -1,13 +1,15 @@
-import yaml
 import shutil
+
+import yaml
 from pydantic import BaseModel
 
-from pyrefactorlsp import PROJECT_DIR
+from pyrefactorlsp.constants import PROJECT_DIR
 
 
 class Config(BaseModel):
     server_name: str
     server_version: str
+    server_url: str
     server_port: int
 
 
