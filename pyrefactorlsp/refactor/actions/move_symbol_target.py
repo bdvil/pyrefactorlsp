@@ -1,10 +1,13 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Union
 
 import libcst.matchers as m
 from libcst import (
     Attribute,
+    BaseCompoundStatement,
+    ClassDef,
     CSTTransformer,
+    FunctionDef,
     Import,
     ImportAlias,
     ImportFrom,
@@ -19,9 +22,16 @@ from libcst import (
 from libcst import (
     Module as CSTModule,
 )
+from libcst.metadata import (
+    CodeRange,
+    PositionProvider,
+    QualifiedNameProvider,
+    QualifiedNameSource,
+)
 
 from pyrefactorlsp.refactor.actions.move_symbol_source import MoveSymbolSource
-from pyrefactorlsp.refactor.imports import ImportedSymbolsCollector
+from pyrefactorlsp.refactor.graph import Graph
+from pyrefactorlsp.refactor.imports import get_module_name
 from pyrefactorlsp.refactor.module import Module
 
 
@@ -59,9 +69,17 @@ def join_attrs(x: Attribute | Name | None, y: Attribute | Name) -> Attribute | N
 
 
 class ReplaceImports(CSTTransformer):
-    def __init__(self, imported_symbols: set[str], replace_imports: Mapping[str, str]):
-        self.imported_symbols = imported_symbols
-        print(imported_symbols)
+    METADATA_DEPENDENCIES = (QualifiedNameProvider,)
+
+    def __init__(
+        self,
+        replace_imports: Mapping[str, str],
+        add_imports: Iterable[str] | None = None,
+        remove_imports: Iterable[str] | None = None,
+    ):
+        self.imported_symbols: set[str] = set()
+
+        self._replace_import_map = replace_imports
 
         self._replace_imports: list[
             tuple[Union[m.Name, m.Attribute], Attribute | Name, str]
@@ -79,7 +97,73 @@ class ReplaceImports(CSTTransformer):
                 )
             )
         self._imports_to_remove: set[ImportFrom | Import] = set()
-        self._imports_to_add: set[ImportFrom | Import] = set()
+        self._imports_to_add: dict[frozenset[str], ImportFrom | Import] = {}
+
+        self._update_attr: dict[Name | Attribute, Name] = {}
+
+        if add_imports is not None:
+            for add_import in add_imports:
+                module, _, obj = add_import.rpartition(".")
+                self._add_import(module, obj)
+        if remove_imports is not None:
+            for remove_import in remove_imports:
+                module, _, obj = remove_import.rpartition(".")
+                self._remove_import(module, obj)
+
+    def _add_import(self, module: str, obj: str):
+        obj_key = frozenset([obj])
+        if obj_key in self._imports_to_add:
+            return
+        self._imports_to_add[obj_key] = ImportFrom(
+            module=seq_to_attr(module.split(".")),
+            names=[ImportAlias(name=Name(value=obj))],
+        )
+
+    def _remove_import(self, module: str, obj: str):
+        self._imports_to_remove.add(
+            ImportFrom(
+                module=seq_to_attr(module.split(".")),
+                names=[ImportAlias(name=Name(value=obj))],
+            )
+        )
+
+    def visit_Name(self, node: Name) -> bool:
+        qualified_names = self.get_metadata(QualifiedNameProvider, node, default=set())
+        for name in qualified_names:
+            if (
+                name.source == QualifiedNameSource.IMPORT
+                and name.name in self._replace_import_map
+            ):
+                module, _, obj = name.name.rpartition(".")
+                self._add_import(module, obj)
+                self._update_attr[node] = Name(value=obj)
+                return False
+        return True
+
+    def visit_Attribute(self, node: Attribute) -> bool:
+        qualified_names = self.get_metadata(QualifiedNameProvider, node, default=set())
+        for name in qualified_names:
+            if (
+                name.source == QualifiedNameSource.IMPORT
+                and name.name in self._replace_import_map
+            ):
+                module, _, obj = name.name.rpartition(".")
+                self._add_import(module, obj)
+                self._update_attr[node] = Name(value=obj)
+                return False
+        return True
+
+    def leave_Attribute(
+        self, original_node: Attribute, updated_node: Attribute
+    ) -> Name | Attribute:
+        if original_node in self._update_attr:
+            return self._update_attr[original_node]
+        return updated_node
+
+    def leave_Name(self, original_node: Name, updated_node: Name) -> Name:
+        if original_node in self._update_attr:
+            return self._update_attr[original_node]
+        return updated_node
 
     def should_be_replaced(
         self, prefix: Attribute | Name | None, name: ImportAlias
@@ -90,9 +174,6 @@ class ReplaceImports(CSTTransformer):
                 return attr_to, obj
         return None, None
 
-    def visit_Import(self, node: Import) -> bool | None:
-        return
-
     def visit_ImportFrom(self, node: ImportFrom) -> bool | None:
         if node.module is None or len(node.relative):
             # TODO: Resolve relative path and use something similar to the
@@ -102,31 +183,27 @@ class ReplaceImports(CSTTransformer):
             if m.matches(node.module, matcher_from):
                 if not isinstance(node.names, ImportStar):
                     self._imports_to_remove.add(node)
-                    self._imports_to_add.add(
-                        node.with_changes(
-                            names=[
-                                import_alias
-                                for import_alias in node.names
-                                if not m.matches(import_alias.name, m.Name(value=obj))
-                            ]
-                        )
+                    import_aliases = []
+                    import_names = []
+                    for import_alias in node.names:
+                        if not m.matches(import_alias.name, m.Name(value=obj)):
+                            import_aliases.append(import_alias)
+                            import_names.append(get_module_name(import_alias.name))
+                    self._imports_to_add[frozenset(import_names)] = node.with_changes(
+                        names=import_aliases
                     )
-                    self._imports_to_add.add(
-                        ImportFrom(
-                            module=attr_to,
-                            names=[
-                                import_alias.with_changes(comma=MaybeSentinel.DEFAULT)
-                                for import_alias in node.names
-                                if m.matches(import_alias.name, m.Name(value=obj))
-                            ],
-                        )
+                    self._imports_to_add[frozenset([obj])] = ImportFrom(
+                        module=attr_to,
+                        names=[
+                            import_alias.with_changes(comma=MaybeSentinel.DEFAULT)
+                            for import_alias in node.names
+                            if m.matches(import_alias.name, m.Name(value=obj))
+                        ],
                     )
                 else:
-                    self._imports_to_add.add(
-                        ImportFrom(
-                            module=attr_to,
-                            names=[ImportAlias(name=Name(value=obj))],
-                        )
+                    self._imports_to_add[frozenset([obj])] = ImportFrom(
+                        module=attr_to,
+                        names=[ImportAlias(name=Name(value=obj))],
                     )
 
     def leave_Import(
@@ -149,24 +226,75 @@ class ReplaceImports(CSTTransformer):
         self, original_node: CSTModule, updated_node: CSTModule
     ) -> CSTModule:
         new_body = []
-        for import_ in self._imports_to_add:
+        for import_ in self._imports_to_add.values():
             new_body.append(SimpleStatementLine(body=[import_]))
         new_body.extend(updated_node.body)
         return updated_node.with_changes(body=new_body)
 
 
+class AddSymbol(CSTTransformer):
+    METADATA_DEPENDENCIES = (PositionProvider,)
+
+    def __init__(
+        self, lineno: int, symbol: FunctionDef | ClassDef | SimpleStatementLine
+    ):
+        self.lineno = lineno
+
+        self.symbol = symbol
+
+    def _is_after(self, line: SimpleStatementLine | BaseCompoundStatement):
+        """Checks whether the code_range is after the given line number.
+
+        Args:
+            code_range (`CodeRange | None`):
+        """
+        code_range = self.get_metadata(PositionProvider, line, None)
+        if code_range is None:
+            return False
+
+        return code_range.start.line >= self.lineno
+
+    def leave_Module(
+        self, original_node: CSTModule, updated_node: CSTModule
+    ) -> CSTModule:
+        new_body: list[SimpleStatementLine | BaseCompoundStatement] = []
+        is_added = False
+        for line in updated_node.body:
+            if not is_added and self._is_after(line):
+                new_body.append(self.symbol)
+                is_added = True
+            new_body.append(line)
+
+        return updated_node.with_changes(body=new_body)
+
+
 def move_symbol_target(
-    target: Module, move_source: MoveSymbolSource, line: int, col: int
+    graph: Graph[Module],
+    target: Module,
+    move_source: MoveSymbolSource,
+    line: int,
 ):
     """
     Finish moving a module
 
     Args:
+        graph (`Graph[Module]`): dependency graph
         target (`Module`):
         move_source (`MoveSymbolSource`):
-        line (`int`):
-        col (`int`):
+        line (`int`): line to add the element to
     """
+    if move_source.symbol_name is None or move_source.symbol is None:
+        return
+    source_name = move_source.source_mod.full_mod_name + "." + move_source.symbol_name
+    target_name = target.full_mod_name + "." + move_source.symbol_name
     wrapper = MetadataWrapper(target.cst)
-    imported_symbols = ImportedSymbolsCollector()
-    wrapper.visit(imported_symbols)
+    import_replacer = ReplaceImports({}, move_source.needed_imports, {source_name})
+    updated_target = wrapper.visit(import_replacer)
+    wrapper = MetadataWrapper(updated_target)
+    add_symbol = AddSymbol(line, move_source.symbol)
+    updated_target = wrapper.visit(add_symbol)
+
+    for dependent_mod in graph.children(move_source.source_mod):
+        wrapper = MetadataWrapper(dependent_mod.cst)
+        import_replacer = ReplaceImports({source_name: target_name})
+        updated_dependency = wrapper.visit(import_replacer)

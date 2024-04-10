@@ -1,22 +1,22 @@
 from sample_project import a as aa
-from sample_project.pkg import mod2
+from sample_project.pkg.mod2 import T, x
 
 from . import mod4
 
 z = mod4.b
 
-y = mod2.x
+y = x
 
-z, w = (mod2.x, mod2.x)
+z, w = (x, x)
 
 
-def test_func(x: mod2.T):
+def test_func(x: T):
     tmp = aa + y
     return x
 
 
 class Test:
-    aa: mod2.T
+    aa: T
 
     def __init__(self):
         self.bb = y + 2

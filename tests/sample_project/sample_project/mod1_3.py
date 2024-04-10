@@ -1,5 +1,5 @@
+import sample_project.pkg.mod2 as mod2
 from sample_project import a as aa
-from sample_project.pkg import mod2
 
 from . import mod4
 

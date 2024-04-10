@@ -29,16 +29,16 @@ class ImportedSymbolsCollector(libcst.CSTVisitor):
         for name in qualified_names:
             if name.source == QualifiedNameSource.IMPORT:
                 self.imported_symbols.add(name.name)
-        return False
+                return False
+        return True
 
     def visit_Attribute(self, node: libcst.Attribute) -> bool:
         qualified_names = self.get_metadata(QualifiedNameProvider, node, default=set())
-        if not len(qualified_names):
-            return True
         for name in qualified_names:
             if name.source == QualifiedNameSource.IMPORT:
                 self.imported_symbols.add(name.name)
-        return False
+                return False
+        return True
 
 
 def find_imports(module: Module) -> set[str]:

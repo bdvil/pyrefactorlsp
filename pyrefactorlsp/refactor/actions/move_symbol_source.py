@@ -26,7 +26,7 @@ class RemoveSymbolFromSource(CSTTransformer):
         self.colno = colno
 
         self._is_inside_symbol = False
-        self.symbol: CSTNode | None = None
+        self.symbol: FunctionDef | ClassDef | SimpleStatementLine | None = None
         self.symbol_name: str | None = None
         self.needed_imports: set[str] = set()
 
@@ -152,7 +152,7 @@ class RemoveSymbolFromSource(CSTTransformer):
 @dataclass
 class MoveSymbolSource:
     needed_imports: frozenset[str]
-    symbol: CSTNode | None
+    symbol: FunctionDef | ClassDef | SimpleStatementLine | None
     symbol_name: str | None
     updated_source: CSTNode
     source_mod: Module
