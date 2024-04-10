@@ -1,4 +1,5 @@
-import libcst.matchers as m
+from dataclasses import dataclass
+
 from libcst import (
     Attribute,
     ClassDef,
@@ -148,10 +149,43 @@ class RemoveSymbolFromSource(CSTTransformer):
         return self._add_needed_imports(node)
 
 
-def move_symbol(start: Module, end: Module, line: int, col: int):
+@dataclass
+class MoveSymbolSource:
+    needed_imports: frozenset[str]
+    symbol: CSTNode | None
+    symbol_name: str | None
+    updated_source: CSTNode
+    source_mod: Module
+
+
+def move_symbol_source(source: Module, line: int, col: int) -> MoveSymbolSource:
     """
-    Move symbol from start module to end module and update all imports.
+    Start moving the symbol.
+    * Removes it from the module
+    * Gets imports that will need to be added in the target file.
+
+    Args:
+        source (`Module`): source file
+        line (`int`): line number of the symbol to move
+        col (`int`): col numner of the symbol to move
+    Returns:
+        `MoveSymbolSource`: metadata of the current move. Note that nothing is
+        actually saved at this point.
     """
-    wrapper = MetadataWrapper(start.cst)
-    symbole_remover = RemoveSymbolFromSource(line, col)
-    wrapper.visit(symbole_remover)
+    wrapper = MetadataWrapper(source.cst)
+    symbol_remover = RemoveSymbolFromSource(line, col)
+    updated_source = wrapper.visit(symbol_remover)
+    local_mod = f"{source.package}.{source.name}"
+    needed_imports = frozenset(
+        {
+            import_.replace("<local>", local_mod)
+            for import_ in symbol_remover.needed_imports
+        }
+    )
+    return MoveSymbolSource(
+        needed_imports=needed_imports,
+        symbol=symbol_remover.symbol,
+        symbol_name=symbol_remover.symbol_name,
+        updated_source=updated_source,
+        source_mod=source,
+    )

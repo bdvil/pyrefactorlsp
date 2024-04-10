@@ -1,5 +1,9 @@
-from sample_project import a
+from sample_project import a as aa
 from sample_project.pkg.mod2 import T, x
+
+from . import mod4
+
+z = mod4.b
 
 y = x
 
@@ -7,7 +11,7 @@ z, w = (x, x)
 
 
 def test_func(x: T):
-    tmp = a + y
+    tmp = aa + y
     return x
 
 
