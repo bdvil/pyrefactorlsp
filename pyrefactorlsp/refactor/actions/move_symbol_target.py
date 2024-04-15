@@ -23,7 +23,6 @@ from libcst import (
     Module as CSTModule,
 )
 from libcst.metadata import (
-    CodeRange,
     PositionProvider,
     QualifiedNameProvider,
     QualifiedNameSource,
@@ -269,7 +268,7 @@ class AddSymbol(CSTTransformer):
 
 
 def move_symbol_target(
-    graph: Graph[Module],
+    graph: Graph,
     target: Module,
     move_source: MoveSymbolSource,
     line: int,
@@ -278,7 +277,7 @@ def move_symbol_target(
     Finish moving a module
 
     Args:
-        graph (`Graph[Module]`): dependency graph
+        graph (`Graph`): dependency graph
         target (`Module`):
         move_source (`MoveSymbolSource`):
         line (`int`): line to add the element to
@@ -292,9 +291,16 @@ def move_symbol_target(
     updated_target = wrapper.visit(import_replacer)
     wrapper = MetadataWrapper(updated_target)
     add_symbol = AddSymbol(line, move_source.symbol)
-    updated_target = wrapper.visit(add_symbol)
+    target.cst = wrapper.visit(add_symbol)
+
+    for new_dep in move_source.needed_imports:
+        new_dep_mod = graph.node_from_path(new_dep)
+        graph.add_edge((target, new_dep_mod))
+    graph.remove_edge((graph.node_from_path(source_name), target))
 
     for dependent_mod in graph.children(move_source.source_mod):
         wrapper = MetadataWrapper(dependent_mod.cst)
         import_replacer = ReplaceImports({source_name: target_name})
-        updated_dependency = wrapper.visit(import_replacer)
+        dependent_mod.cst = wrapper.visit(import_replacer)
+        graph.remove_edge((graph.node_from_path(source_name), dependent_mod))
+        graph.add_edge((graph.node_from_path(target_name), dependent_mod))
