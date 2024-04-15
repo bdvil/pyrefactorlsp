@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from importlib.util import resolve_name
 from pathlib import Path
 
@@ -31,11 +32,16 @@ class Graph:
         return self.edges.remove(edge)
 
     def remove_nodes(self, nodes: list[Module]) -> None:
-        for edge in self.edges.copy():
-            if edge[0] in nodes or edge[1] in nodes:
-                self.edges.remove(edge)
+        for k in reversed(range(len(self.edges))):
+            if self.edges[k][0] in nodes or self.edges[k][1] in nodes:
+                self.edges.remove(self.edges[k])
         for node in nodes:
             self.nodes.remove(node)
+
+    def reset_dependencies(self, node: Module) -> None:
+        for k in reversed(range(len(self.edges))):
+            if self.edges[k][0] == node:
+                self.edges.remove(self.edges[k])
 
     def has_edge_from(self, node: Module) -> bool:
         for source_node, _ in self.edges:
@@ -96,7 +102,7 @@ def add_nodes_to_graph(graph: Graph, path: Path, package: str | None = None) -> 
         file_package.append(file.name)
         if file.is_dir():
             add_nodes_to_graph(graph, file, ".".join(file_package))
-        else:
+        elif file.suffix == ".py":
             mod = get_module(file, package)
             graph.add_node(mod)
 

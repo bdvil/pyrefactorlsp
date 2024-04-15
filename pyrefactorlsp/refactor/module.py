@@ -3,6 +3,8 @@ from pathlib import Path
 
 import libcst
 
+from pyrefactorlsp.constants import LOGGER
+
 
 @dataclass(frozen=True, eq=True)
 class Symbol:
@@ -37,6 +39,7 @@ class Module:
 
 
 def get_module(path: Path, package: str) -> Module:
+    LOGGER.debug(path)
     with open(path, "r") as f:
         text = f.read()
         cst = libcst.parse_module(text)
