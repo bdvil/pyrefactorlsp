@@ -272,7 +272,7 @@ def move_symbol_target(
     target: Module,
     move_source: MoveSymbolSource,
     line: int,
-):
+) -> list[Module]:
     """
     Finish moving a module
 
@@ -281,9 +281,11 @@ def move_symbol_target(
         target (`Module`):
         move_source (`MoveSymbolSource`):
         line (`int`): line to add the element to
+    Returns:
+        `list[Module]`: list of edited modules
     """
     if move_source.symbol_name is None or move_source.symbol is None:
-        return
+        return []
     source_name = move_source.source_mod.full_mod_name + "." + move_source.symbol_name
     target_name = target.full_mod_name + "." + move_source.symbol_name
     wrapper = MetadataWrapper(target.cst)
@@ -293,6 +295,7 @@ def move_symbol_target(
     add_symbol = AddSymbol(line, move_source.symbol)
     move_source.source_mod.cst = move_source.updated_source
     target.cst = wrapper.visit(add_symbol)
+    edited_modules = [move_source.source_mod, target]
 
     for new_dep in move_source.needed_imports:
         new_dep_mod = graph.node_from_path(new_dep)
@@ -305,3 +308,5 @@ def move_symbol_target(
         dependent_mod.cst = wrapper.visit(import_replacer)
         graph.remove_edge((graph.node_from_path(source_name), dependent_mod))
         graph.add_edge((graph.node_from_path(target_name), dependent_mod))
+        edited_modules.append(dependent_mod)
+    return edited_modules
