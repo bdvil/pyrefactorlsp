@@ -1,25 +1,30 @@
-from pathlib import Path
+from collections.abc import Generator
+from typing import Literal, cast
 
 import click
 import libcst
 from lsprotocol.types import (
-    CODE_ACTION_RESOLVE,
     INITIALIZED,
     TEXT_DOCUMENT_CODE_ACTION,
     TEXT_DOCUMENT_DID_SAVE,
     CodeAction,
-    CodeActionDisabledType,
     CodeActionKind,
     CodeActionOptions,
     CodeActionParams,
     Command,
     DidSaveTextDocumentParams,
     InitializedParams,
+    Range,
 )
 from pygls.server import LanguageServer
 
 from pyrefactorlsp import LOGGER, __version__
 from pyrefactorlsp.config import load_config
+from pyrefactorlsp.refactor.actions.move_symbol_source import (
+    MoveSymbolSource,
+    move_symbol_source,
+)
+from pyrefactorlsp.refactor.actions.move_symbol_target import move_symbol_target
 from pyrefactorlsp.refactor.config import Config
 from pyrefactorlsp.refactor.graph import (
     Graph,
@@ -27,6 +32,7 @@ from pyrefactorlsp.refactor.graph import (
     get_module_dependencies,
 )
 from pyrefactorlsp.refactor.load import get_project_config
+from pyrefactorlsp.refactor.module import Module
 
 
 class RefactorServer(LanguageServer):
@@ -34,6 +40,33 @@ class RefactorServer(LanguageServer):
         super().__init__("pyrefactorlsp", version)
         self.configs: dict[str, Config] = {}
         self.graphs: dict[str, Graph] = {}
+        self.current_moves: dict[str, MoveSymbolSource] = {}
+
+    def get_moves(self, file_uri: str) -> Generator[MoveSymbolSource, None, None]:
+        file_uri = file_uri.removeprefix("file://")
+        for workspace, move in self.current_moves.items():
+            if file_uri.startswith(workspace):
+                yield move
+
+    def get_workspace_moves(
+        self, file_uri: str
+    ) -> Generator[tuple[str, MoveSymbolSource], None, None]:
+        file_uri = file_uri.removeprefix("file://")
+        for workspace, move in self.current_moves.items():
+            if file_uri.startswith(workspace):
+                yield workspace, move
+
+    def add_move(self, file_uri: str, move: MoveSymbolSource):
+        file_uri = file_uri.removeprefix("file://")
+        for workspace in self.configs:
+            if file_uri.startswith(workspace):
+                self.current_moves[workspace] = move
+
+    def del_move(self, file_uri: str) -> None:
+        file_uri = file_uri.removeprefix("file://")
+        for workspace in self.configs:
+            if file_uri.startswith(workspace) and workspace in self.current_moves:
+                del self.current_moves[workspace]
 
     def build_graph(self, workspace_uri: str) -> None:
         if not workspace_uri.startswith("file://"):
@@ -51,11 +84,11 @@ class RefactorServer(LanguageServer):
             return
         file_uri = file_uri.removeprefix("file://")
         cst: None | libcst.Module = None
-        for workspace_url, graph in self.graphs.items():
-            if not file_uri.startswith(workspace_url):
+        for workspace_uri, graph in self.graphs.items():
+            if not file_uri.startswith(workspace_uri):
                 continue
             file_package = (
-                file_uri.removeprefix(workspace_url)
+                file_uri.removeprefix(workspace_uri)
                 .removeprefix("/")
                 .removesuffix(".py")
                 .replace("/", ".")
@@ -71,6 +104,26 @@ class RefactorServer(LanguageServer):
                     dependencies = get_module_dependencies(graph, mod)
                     for dependency in dependencies:
                         graph.add_edge((mod, dependency))
+
+    def get_mods(self, file_uri: str) -> Generator[tuple[Graph, Module], None, None]:
+        if not file_uri.endswith(".py"):
+            return None
+        if not file_uri.startswith("file://"):
+            return None
+        file_uri = file_uri.removeprefix("file://")
+        for workspace_uri, graph in self.graphs.items():
+            if not file_uri.startswith(workspace_uri):
+                continue
+            file_package = (
+                file_uri.removeprefix(workspace_uri)
+                .removeprefix("/")
+                .removesuffix(".py")
+                .replace("/", ".")
+            )
+            for mod in graph.nodes:
+                if mod.full_mod_name == file_package:
+                    yield (graph, mod)
+                    break
 
 
 server = RefactorServer(f"v{__version__}")
@@ -94,23 +147,67 @@ def did_save(ls: LanguageServer, params: DidSaveTextDocumentParams):
     TEXT_DOCUMENT_CODE_ACTION,
     CodeActionOptions(code_action_kinds=[CodeActionKind.Refactor]),
 )
-def code_actions(params: CodeActionParams):
+def code_actions(params: CodeActionParams) -> list[CodeAction]:
     LOGGER.debug("TEXT_DOCUMENT_CODE_ACTION: %s", params)
-    action = CodeAction(
-        title="Move symbol",
-        kind="refactor.move",
-        command=Command(
-            title="Start moving symbol",
-            command="codeAction.moveSymbol",
-            arguments=["test"],
-        ),
-    )
-    return [action]
+    for _ in server.get_mods(params.text_document.uri):
+        actions = [
+            CodeAction(
+                title="Move symbol",
+                kind="refactor.move",
+                command=Command(
+                    title="Start moving symbol",
+                    command="codeAction.moveSymbol",
+                    arguments=[params.text_document.uri, params.range],
+                ),
+            )
+        ]
+        for move in server.get_moves(params.text_document.uri):
+            actions.append(
+                CodeAction(
+                    title=f"Finish moving {move.symbol_name} here",
+                    kind="refactor.move",
+                    command=Command(
+                        title="Finish moving symbol",
+                        command="codeAction.finishMoveSymbol",
+                        arguments=[params.text_document.uri, params.range],
+                    ),
+                )
+            )
+            break
+        return actions
+    return []
 
 
 @server.command("codeAction.moveSymbol")
 def move_symbol_command(ls: LanguageServer, args):
+    uri = cast(str, args[0])
+    location = cast(
+        dict[Literal["start", "end"], dict[Literal["line", "character"], int]], args[1]
+    )
     LOGGER.debug("codeAction.moveSymbol: %s", args)
+    for _, mod in server.get_mods(uri):
+        move_source = move_symbol_source(
+            mod, location["start"]["line"] + 1, location["start"]["character"]
+        )
+        print(move_source.symbol_name)
+        server.add_move(uri, move_source)
+
+
+@server.command("codeAction.finishMoveSymbol")
+def finish_move_symbol_command(ls: LanguageServer, args):
+    uri = cast(str, args[0])
+    location = cast(
+        dict[Literal["start", "end"], dict[Literal["line", "character"], int]], args[1]
+    )
+    LOGGER.debug("codeAction.finishMoveSymbol: %s", args)
+    mods = list(server.get_mods(uri))
+    for workspace, move in server.get_workspace_moves(uri):
+        if workspace not in mods:
+            continue
+        graph, mod = mods[workspace]
+        updated_mods = move_symbol_target(
+            graph, mod, move, location["start"]["line"] + 1
+        )
 
 
 @click.command("serve")
