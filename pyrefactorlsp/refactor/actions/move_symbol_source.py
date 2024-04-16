@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import libcst
 from libcst import (
     Attribute,
     ClassDef,
@@ -154,7 +155,7 @@ class MoveSymbolSource:
     needed_imports: frozenset[str]
     symbol: FunctionDef | ClassDef | SimpleStatementLine | None
     symbol_name: str | None
-    updated_source: CSTNode
+    updated_source: libcst.Module
     source_mod: Module
 
 

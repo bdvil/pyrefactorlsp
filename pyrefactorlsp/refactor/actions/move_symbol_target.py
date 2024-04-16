@@ -291,6 +291,7 @@ def move_symbol_target(
     updated_target = wrapper.visit(import_replacer)
     wrapper = MetadataWrapper(updated_target)
     add_symbol = AddSymbol(line, move_source.symbol)
+    move_source.source_mod.cst = move_source.updated_source
     target.cst = wrapper.visit(add_symbol)
 
     for new_dep in move_source.needed_imports:
