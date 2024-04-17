@@ -298,16 +298,19 @@ def move_symbol_target(
     edited_modules = [move_source.source_mod, target]
 
     for new_dep in move_source.needed_imports:
-        print(new_dep)
-        new_dep_mod = graph.node_from_path(new_dep)
+        new_dep_pkg, _, _ = new_dep.rpartition(".")
+        print("qqq", new_dep_pkg)
+        new_dep_mod = graph.node_from_path(new_dep_pkg)
+        if new_dep_mod is None:
+            continue
         graph.add_edge((target, new_dep_mod))
-    graph.remove_edge((graph.node_from_path(source_name), target))
+    graph.remove_edge((move_source.source_mod, target))
 
     for dependent_mod in graph.children(move_source.source_mod):
         wrapper = MetadataWrapper(dependent_mod.cst)
         import_replacer = ReplaceImports({source_name: target_name})
         dependent_mod.cst = wrapper.visit(import_replacer)
-        graph.remove_edge((graph.node_from_path(source_name), dependent_mod))
-        graph.add_edge((graph.node_from_path(target_name), dependent_mod))
+        graph.remove_edge((move_source.source_mod, dependent_mod))
+        graph.add_edge((target, dependent_mod))
         edited_modules.append(dependent_mod)
     return edited_modules

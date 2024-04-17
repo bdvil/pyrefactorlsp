@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from importlib.util import resolve_name
 from pathlib import Path
 
@@ -16,11 +15,10 @@ class Graph:
         self.nodes: list[Module] = nodes or []
         self.edges: list[tuple[Module, Module]] = edges or []
 
-    def node_from_path(self, path: str) -> Module:
+    def node_from_path(self, path: str) -> Module | None:
         for mod in self.nodes:
             if mod.full_mod_name == path:
                 return mod
-        raise ValueError(f"No module with path {path}")
 
     def add_node(self, node: Module) -> None:
         self.nodes.append(node)

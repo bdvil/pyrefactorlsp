@@ -127,6 +127,7 @@ class RemoveSymbolFromSource(CSTTransformer):
             return True
         for name in qualified_names:
             if name.source == QualifiedNameSource.IMPORT:
+                # FIXME: not working when imported element has attrs
                 self.needed_imports.add(name.name)
             elif (
                 name.source == QualifiedNameSource.LOCAL
@@ -136,7 +137,7 @@ class RemoveSymbolFromSource(CSTTransformer):
                 # Do not include local defs
                 if parts[0] == self.symbol_name:
                     continue
-                self.needed_imports.add(f"<local>.{name.name}")
+                self.needed_imports.add(f"<local>.{parts[0]}")
         return False
 
     def visit_Name(self, node: Name) -> bool:
@@ -177,6 +178,8 @@ def move_symbol_source(source: Module, line: int, col: int) -> MoveSymbolSource:
     symbol_remover = RemoveSymbolFromSource(line, col)
     updated_source = wrapper.visit(symbol_remover)
     local_mod = f"{source.package}.{source.name}"
+    print(symbol_remover.needed_imports)
+
     needed_imports = frozenset(
         {
             import_.replace("<local>", local_mod)
