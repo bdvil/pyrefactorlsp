@@ -7,4 +7,3 @@ def test_diffs():
     opcodes = get_diffs(s1, s2)
     for k, opcode in enumerate(opcodes):
         print("Line", k, opcode)
-    abcdefghijk

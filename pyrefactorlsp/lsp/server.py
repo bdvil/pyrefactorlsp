@@ -14,7 +14,6 @@ from lsprotocol.types import (
     Command,
     DidSaveTextDocumentParams,
     InitializedParams,
-    Range,
 )
 from pygls.server import LanguageServer
 
@@ -105,7 +104,9 @@ class RefactorServer(LanguageServer):
                     for dependency in dependencies:
                         graph.add_edge((mod, dependency))
 
-    def get_mods(self, file_uri: str) -> Generator[tuple[Graph, Module], None, None]:
+    def get_mods(
+        self, file_uri: str
+    ) -> Generator[tuple[str, Graph, Module], None, None]:
         if not file_uri.endswith(".py"):
             return None
         if not file_uri.startswith("file://"):
@@ -122,7 +123,7 @@ class RefactorServer(LanguageServer):
             )
             for mod in graph.nodes:
                 if mod.full_mod_name == file_package:
-                    yield (graph, mod)
+                    yield (workspace_uri, graph, mod)
                     break
 
 
@@ -185,7 +186,7 @@ def move_symbol_command(ls: LanguageServer, args):
         dict[Literal["start", "end"], dict[Literal["line", "character"], int]], args[1]
     )
     LOGGER.debug("codeAction.moveSymbol: %s", args)
-    for _, mod in server.get_mods(uri):
+    for _, _, mod in server.get_mods(uri):
         move_source = move_symbol_source(
             mod, location["start"]["line"] + 1, location["start"]["character"]
         )
@@ -200,14 +201,18 @@ def finish_move_symbol_command(ls: LanguageServer, args):
         dict[Literal["start", "end"], dict[Literal["line", "character"], int]], args[1]
     )
     LOGGER.debug("codeAction.finishMoveSymbol: %s", args)
-    mods = list(server.get_mods(uri))
+    mods = {workspace: (graph, mod) for workspace, graph, mod in server.get_mods(uri)}
+    print(len(mods))
     for workspace, move in server.get_workspace_moves(uri):
+        print(workspace, move.symbol_name)
         if workspace not in mods:
             continue
         graph, mod = mods[workspace]
+        print(mod.full_mod_name)
         updated_mods = move_symbol_target(
             graph, mod, move, location["start"]["line"] + 1
         )
+        print([m.full_mod_name for m in updated_mods])
 
 
 @click.command("serve")

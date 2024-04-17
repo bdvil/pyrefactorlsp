@@ -298,6 +298,7 @@ def move_symbol_target(
     edited_modules = [move_source.source_mod, target]
 
     for new_dep in move_source.needed_imports:
+        print(new_dep)
         new_dep_mod = graph.node_from_path(new_dep)
         graph.add_edge((target, new_dep_mod))
     graph.remove_edge((graph.node_from_path(source_name), target))
