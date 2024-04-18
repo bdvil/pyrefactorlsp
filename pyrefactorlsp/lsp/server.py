@@ -14,6 +14,12 @@ from lsprotocol.types import (
     Command,
     DidSaveTextDocumentParams,
     InitializedParams,
+    OptionalVersionedTextDocumentIdentifier,
+    Position,
+    Range,
+    TextDocumentEdit,
+    TextEdit,
+    WorkspaceEdit,
 )
 from pygls.server import LanguageServer
 
@@ -153,6 +159,15 @@ def code_actions(params: CodeActionParams) -> list[CodeAction]:
     for _ in server.get_mods(params.text_document.uri):
         actions = [
             CodeAction(
+                title="Test",
+                kind="refactor.move",
+                command=Command(
+                    title="Test",
+                    command="codeAction.test",
+                    arguments=[params.text_document.uri],
+                ),
+            ),
+            CodeAction(
                 title="Move symbol",
                 kind="refactor.move",
                 command=Command(
@@ -160,7 +175,7 @@ def code_actions(params: CodeActionParams) -> list[CodeAction]:
                     command="codeAction.moveSymbol",
                     arguments=[params.text_document.uri, params.range],
                 ),
-            )
+            ),
         ]
         for move in server.get_moves(params.text_document.uri):
             actions.append(
@@ -177,6 +192,33 @@ def code_actions(params: CodeActionParams) -> list[CodeAction]:
             break
         return actions
     return []
+
+
+@server.command("codeAction.test")
+def test_edits(ls: LanguageServer, arguments):
+    document = ls.workspace.get_text_document(arguments[0])
+    edit = TextDocumentEdit(
+        text_document=OptionalVersionedTextDocumentIdentifier(
+            uri=arguments[0], version=document.version
+        ),
+        edits=[
+            TextEdit(
+                new_text="This is a test\nThat adds two lines\n",
+                range=Range(
+                    start=Position(line=0, character=0),
+                    end=Position(line=1, character=0),
+                ),
+            ),
+            TextEdit(
+                new_text="This is a test\n",
+                range=Range(
+                    start=Position(line=1, character=0),
+                    end=Position(line=2, character=0),
+                ),
+            ),
+        ],
+    )
+    ls.apply_edit(WorkspaceEdit(document_changes=[edit]))
 
 
 @server.command("codeAction.moveSymbol")
