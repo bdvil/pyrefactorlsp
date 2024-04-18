@@ -19,6 +19,14 @@ from libcst.metadata.name_provider import QualifiedNameProvider
 from pyrefactorlsp.refactor.module import Module
 
 
+def get_attr_base(node: Attribute) -> str:
+    if isinstance(node.value, Name):
+        return node.value.value
+    elif isinstance(node.value, Attribute):
+        return get_attr_base(node.value)
+    raise ValueError("value Not an Attribute or Name")
+
+
 class RemoveSymbolFromSource(CSTTransformer):
     METADATA_DEPENDENCIES = (PositionProvider, QualifiedNameProvider)
 
@@ -127,8 +135,12 @@ class RemoveSymbolFromSource(CSTTransformer):
             return True
         for name in qualified_names:
             if name.source == QualifiedNameSource.IMPORT:
-                # FIXME: not working when imported element has attrs
-                self.needed_imports.add(name.name)
+                if isinstance(node, Attribute):
+                    componenents = name.name.split(".")
+                    k = componenents.index(get_attr_base(node))
+                    self.needed_imports.add(".".join(componenents[: k + 1]))
+                else:
+                    self.needed_imports.add(name.name)
             elif (
                 name.source == QualifiedNameSource.LOCAL
                 and name.name != self.symbol_name

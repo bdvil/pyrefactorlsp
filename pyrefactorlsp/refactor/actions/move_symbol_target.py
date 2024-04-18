@@ -299,7 +299,6 @@ def move_symbol_target(
 
     for new_dep in move_source.needed_imports:
         new_dep_pkg, _, _ = new_dep.rpartition(".")
-        print("qqq", new_dep_pkg)
         new_dep_mod = graph.node_from_path(new_dep_pkg)
         if new_dep_mod is None:
             continue
@@ -307,6 +306,7 @@ def move_symbol_target(
     graph.remove_edge((move_source.source_mod, target))
 
     for dependent_mod in graph.children(move_source.source_mod):
+        print("aaa", dependent_mod.full_mod_name)
         wrapper = MetadataWrapper(dependent_mod.cst)
         import_replacer = ReplaceImports({source_name: target_name})
         dependent_mod.cst = wrapper.visit(import_replacer)

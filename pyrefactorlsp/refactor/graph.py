@@ -17,7 +17,7 @@ class Graph:
 
     def node_from_path(self, path: str) -> Module | None:
         for mod in self.nodes:
-            if mod.full_mod_name == path:
+            if mod.full_mod_name == path or mod.full_mod_name == path + ".__init__":
                 return mod
 
     def add_node(self, node: Module) -> None:
@@ -53,18 +53,18 @@ class Graph:
                 return True
         return False
 
-    def children(self, node: Module) -> set[Module]:
-        children = set()
+    def children(self, node: Module) -> list[Module]:
+        children: list[Module] = []
         for source_node, target_node in self.edges:
-            if source_node == node:
-                children.add(target_node)
+            if source_node == node and target_node not in children:
+                children.append(target_node)
         return children
 
-    def parents(self, node: Module) -> set[Module]:
-        parents = set()
+    def parents(self, node: Module) -> list[Module]:
+        parents: list[Module] = []
         for source_node, target_node in self.edges:
-            if target_node == node:
-                parents.add(source_node)
+            if target_node == node and source_node not in parents:
+                parents.append(source_node)
         return parents
 
 
