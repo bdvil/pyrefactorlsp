@@ -159,15 +159,6 @@ def code_actions(params: CodeActionParams) -> list[CodeAction]:
     for _ in server.get_mods(params.text_document.uri):
         actions = [
             CodeAction(
-                title="Test",
-                kind="refactor.move",
-                command=Command(
-                    title="Test",
-                    command="codeAction.test",
-                    arguments=[params.text_document.uri],
-                ),
-            ),
-            CodeAction(
                 title="Move symbol",
                 kind="refactor.move",
                 command=Command(
