@@ -16,10 +16,9 @@ def get_diffs(original: str, updated: str) -> list[EditBlock]:
     for match in matching_blocks:
         if start == len(original):
             break
-        if start != 0 and match.a != 0:
-            replacement = updated[start_updated : match.b]
-            length = match.a - start
-            unmatched_blocks.append(EditBlock(start, length, replacement))
+        replacement = updated[start_updated : match.b]
+        length = match.a - start
+        unmatched_blocks.append(EditBlock(start, length, replacement))
         start = match.a + match.size
         start_updated = match.b + match.size
     return unmatched_blocks
@@ -43,6 +42,7 @@ def str_index_to_line_offset(
 
 def get_text_edits(original: str, update: str) -> list[TextEdit | AnnotatedTextEdit]:
     edit_blocks = get_diffs(original, update)
+    print(edit_blocks)
     idx = []
     for block in edit_blocks:
         idx.append(block.start)

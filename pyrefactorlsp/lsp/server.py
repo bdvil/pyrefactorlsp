@@ -1,6 +1,6 @@
 from collections.abc import Generator, Sequence
 from dataclasses import dataclass
-from subprocess import PIPE, Popen, run
+from subprocess import PIPE, Popen
 from typing import Literal, cast
 
 import click
@@ -226,7 +226,7 @@ def move_symbol_command(ls: LanguageServer, args):
         move_source = move_symbol_source(
             mod, location["start"]["line"] + 1, location["start"]["character"]
         )
-        print(move_source.symbol_name)
+        print(uri, move_source.symbol_name)
         server.add_move(uri, move_source)
 
 
@@ -281,25 +281,23 @@ def finish_move_symbol_command(ls: LanguageServer, args):
     )
     LOGGER.debug("codeAction.finishMoveSymbol: %s", args)
     mods = {workspace: (graph, mod) for workspace, graph, mod in server.get_mods(uri)}
-    print(len(mods))
     for workspace, move in server.get_workspace_moves(uri):
-        print(workspace, move.symbol_name)
         if workspace not in mods:
             continue
         graph, mod = mods[workspace]
-        print(mod.full_mod_name)
         updated_mods = move_symbol_target(
             graph, mod, move, location["start"]["line"] + 1
         )
-        print([m.full_mod_name for m in updated_mods])
         for mod in updated_mods:
             updated_code = reformat_code(mod.full_mod_name, mod.cst.code)
+            # updated_code = mod.cst.code
             document = ls.workspace.get_text_document(str(mod.url.resolve()))
+            edits = get_text_edits(document.source, updated_code)
             edit = TextDocumentEdit(
                 text_document=OptionalVersionedTextDocumentIdentifier(
                     uri=f"file://{document.uri}", version=document.version
                 ),
-                edits=get_text_edits(document.source, updated_code),
+                edits=edits,
             )
             ls.apply_edit(WorkspaceEdit(document_changes=[edit]))
 

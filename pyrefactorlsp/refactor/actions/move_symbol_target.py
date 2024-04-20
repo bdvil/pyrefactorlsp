@@ -262,9 +262,12 @@ class AddSymbol(CSTTransformer):
         is_added = False
         for line in updated_node.body:
             if not is_added and self._is_after(line):
+                print("ADDDDING!!!")
                 new_body.append(self.symbol)
                 is_added = True
             new_body.append(line)
+        if not is_added:
+            new_body.append(self.symbol)
 
         return updated_node.with_changes(body=new_body)
 
@@ -287,7 +290,6 @@ def move_symbol_target(
         `list[Module]`: list of edited modules
     """
     if move_source.symbol_name is None or move_source.symbol is None:
-        print("Symbols", move_source.symbol_name, move_source.symbol)
         return []
     source_name = move_source.source_mod.full_mod_name + "." + move_source.symbol_name
     target_name = target.full_mod_name + "." + move_source.symbol_name
@@ -296,8 +298,8 @@ def move_symbol_target(
     updated_target = wrapper.visit(import_replacer)
     wrapper = MetadataWrapper(updated_target)
     add_symbol = AddSymbol(line, move_source.symbol)
-    move_source.source_mod.cst = move_source.updated_source
     target.cst = wrapper.visit(add_symbol)
+    move_source.source_mod.cst = move_source.updated_source
     edited_modules = [move_source.source_mod, target]
 
     for new_dep in move_source.needed_imports:
@@ -308,12 +310,12 @@ def move_symbol_target(
         graph.add_edge((target, new_dep_mod))
     graph.remove_edge((move_source.source_mod, target))
 
-    for dependent_mod in graph.children(move_source.source_mod):
-        print("aaa", dependent_mod.full_mod_name)
-        wrapper = MetadataWrapper(dependent_mod.cst)
+    for dependending_mod in graph.parents(move_source.source_mod):
+        wrapper = MetadataWrapper(dependending_mod.cst)
         import_replacer = ReplaceImports({source_name: target_name})
-        dependent_mod.cst = wrapper.visit(import_replacer)
-        graph.remove_edge((move_source.source_mod, dependent_mod))
-        graph.add_edge((target, dependent_mod))
-        edited_modules.append(dependent_mod)
+        dependending_mod.cst = wrapper.visit(import_replacer)
+        graph.remove_edge((dependending_mod, move_source.source_mod))
+        graph.add_edge((dependending_mod, target))
+        if dependending_mod not in edited_modules:
+            edited_modules.append(dependending_mod)
     return edited_modules

@@ -23,6 +23,16 @@ def test_diffs():
     assert s1 == s2
 
 
+def test_diffs_from_start():
+    s1 = "This is a text#with several lines#and some differences#in places."
+    s2 = "Added Something here#This is a text#with many lines#and some differences# sometimes."
+    blocks = get_diffs(s1, s2)
+    for block in reversed(blocks):
+        print(block)
+        s1 = update_str(s1, block.replacement, block.start, block.start + block.length)
+    assert s1 == s2
+
+
 def test_index_to_line_offset():
     s1 = "This is a text\nwith several lines\nand some differences\nin places."
     line_offsets = str_index_to_line_offset(s1, [0, 5, 30, 50])
