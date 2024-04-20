@@ -1,4 +1,6 @@
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
+from dataclasses import dataclass
+from subprocess import PIPE, Popen, run
 from typing import Literal, cast
 
 import click
@@ -31,6 +33,7 @@ from pyrefactorlsp.refactor.actions.move_symbol_source import (
 )
 from pyrefactorlsp.refactor.actions.move_symbol_target import move_symbol_target
 from pyrefactorlsp.refactor.config import Config
+from pyrefactorlsp.refactor.diffs import get_text_edits
 from pyrefactorlsp.refactor.graph import (
     Graph,
     build_project_graph,
@@ -227,6 +230,49 @@ def move_symbol_command(ls: LanguageServer, args):
         server.add_move(uri, move_source)
 
 
+@dataclass
+class ProcessOutput:
+    stdout: str
+    stderr: str
+    statuscode: int
+
+
+def execute_ruff(args: Sequence[str], source: str) -> ProcessOutput:
+    process = Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    (out, err) = process.communicate(bytes(source, encoding="utf-8"))
+    code = process.wait()
+    return ProcessOutput(
+        statuscode=code, stdout=bytes.decode(out), stderr=bytes.decode(err)
+    )
+
+
+def reformat_code(document_uri: str, source: str) -> str:
+    # ruff check --stdin-filename "azsqdf.py" --fix --fix-only --select I --quiet
+    # ruff format --stdin-filename "azsqdf.py"
+    reformat_out = execute_ruff(
+        [
+            "ruff",
+            "format",
+            "--stdin-filename",
+            document_uri,
+        ],
+        source,
+    )
+    return execute_ruff(
+        [
+            "ruff",
+            "check",
+            "--fix-only",
+            "--quiet",
+            "--select",
+            "I",
+            "--stdin-filename",
+            document_uri,
+        ],
+        reformat_out.stdout,
+    ).stdout
+
+
 @server.command("codeAction.finishMoveSymbol")
 def finish_move_symbol_command(ls: LanguageServer, args):
     uri = cast(str, args[0])
@@ -246,6 +292,16 @@ def finish_move_symbol_command(ls: LanguageServer, args):
             graph, mod, move, location["start"]["line"] + 1
         )
         print([m.full_mod_name for m in updated_mods])
+        for mod in updated_mods:
+            updated_code = reformat_code(mod.full_mod_name, mod.cst.code)
+            document = ls.workspace.get_text_document(str(mod.url.resolve()))
+            edit = TextDocumentEdit(
+                text_document=OptionalVersionedTextDocumentIdentifier(
+                    uri=f"file://{document.uri}", version=document.version
+                ),
+                edits=get_text_edits(document.source, updated_code),
+            )
+            ls.apply_edit(WorkspaceEdit(document_changes=[edit]))
 
 
 @click.command("serve")

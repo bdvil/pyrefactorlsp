@@ -2,7 +2,7 @@ from collections import namedtuple
 from collections.abc import Sequence
 from difflib import SequenceMatcher
 
-from lsprotocol.types import Position, Range, TextEdit
+from lsprotocol.types import AnnotatedTextEdit, Position, Range, TextEdit
 
 EditBlock = namedtuple("EditBlock", ["start", "length", "replacement"])
 
@@ -41,7 +41,7 @@ def str_index_to_line_offset(
     return locations
 
 
-def get_text_edits(original: str, update: str):
+def get_text_edits(original: str, update: str) -> list[TextEdit | AnnotatedTextEdit]:
     edit_blocks = get_diffs(original, update)
     idx = []
     for block in edit_blocks:

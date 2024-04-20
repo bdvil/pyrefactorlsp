@@ -191,14 +191,16 @@ class ReplaceImports(CSTTransformer):
                     self._imports_to_add[frozenset(import_names)] = node.with_changes(
                         names=import_aliases
                     )
-                    self._imports_to_add[frozenset([obj])] = ImportFrom(
-                        module=attr_to,
-                        names=[
-                            import_alias.with_changes(comma=MaybeSentinel.DEFAULT)
-                            for import_alias in node.names
-                            if m.matches(import_alias.name, m.Name(value=obj))
-                        ],
-                    )
+                    import_alias = [
+                        import_alias.with_changes(comma=MaybeSentinel.DEFAULT)
+                        for import_alias in node.names
+                        if m.matches(import_alias.name, m.Name(value=obj))
+                    ]
+                    if len(import_alias):
+                        self._imports_to_add[frozenset([obj])] = ImportFrom(
+                            module=attr_to,
+                            names=import_aliases,
+                        )
                 else:
                     self._imports_to_add[frozenset([obj])] = ImportFrom(
                         module=attr_to,
@@ -285,6 +287,7 @@ def move_symbol_target(
         `list[Module]`: list of edited modules
     """
     if move_source.symbol_name is None or move_source.symbol is None:
+        print("Symbols", move_source.symbol_name, move_source.symbol)
         return []
     source_name = move_source.source_mod.full_mod_name + "." + move_source.symbol_name
     target_name = target.full_mod_name + "." + move_source.symbol_name
