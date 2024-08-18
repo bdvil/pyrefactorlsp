@@ -16,6 +16,16 @@ class InvalidPyprojectConfigError(Exception):
 
 
 def find_project_file(path: PathLike | str) -> Path:
+    """
+    Locate the pyproject config file of the project.
+    It will start from given location and try all parent folders
+
+    Args:
+        path (`PathLike | str`): path to start search
+
+    Returns:
+        `Path`: path to pyproject.toml file
+    """
     path = Path(path)
     for file in path.iterdir():
         if file.is_file() and file.name == "pyproject.toml":
@@ -57,6 +67,16 @@ def get_project_name(pyproject: Mapping[str, Any]) -> str:
 
 
 def get_pyrefactor_config(root: Path, pyproject: Mapping[str, Any]) -> Config:
+    """
+    Build pyrefactor config from pyproject.toml file.
+
+    Args:
+        root (`Path`): parent of pyproject file location
+        pyproject (`Mapping[str, Any]`): parsed pyproject file
+
+    Returns:
+        `Config`:
+    """
     project_name = get_project_name(pyproject)
     if "tool" in pyproject and "pyrefactor" in pyproject["tool"]:
         pyproject["tool"]["pyrefactor"]["project_name"] = project_name
@@ -66,6 +86,15 @@ def get_pyrefactor_config(root: Path, pyproject: Mapping[str, Any]) -> Config:
 
 
 def get_project_config(path: PathLike | str) -> Config:
+    """
+    Config object of a given project path
+
+    Args:
+        path (`PathLike | str`):
+
+    Returns:
+        `Config`:
+    """
     path = Path(path)
     project_file_path = find_project_file(path)
     with open(project_file_path, "rb") as f:

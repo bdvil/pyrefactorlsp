@@ -47,52 +47,80 @@ class RefactorServer(LanguageServer):
     def __init__(self, version: str):
         super().__init__("pyrefactorlsp", version)
         self.configs: dict[str, Config] = {}
-        self.graphs: dict[str, Graph] = {}
+        self.dependency_graphs: dict[str, Graph] = {}
         self.current_moves: dict[str, MoveSymbolSource] = {}
 
-    def get_moves(self, file_uri: str) -> Generator[MoveSymbolSource, None, None]:
-        file_uri = file_uri.removeprefix("file://")
-        for workspace, move in self.current_moves.items():
-            if file_uri.startswith(workspace):
-                yield move
-
-    def get_workspace_moves(
+    def get_ongoing_moves(
         self, file_uri: str
     ) -> Generator[tuple[str, MoveSymbolSource], None, None]:
+        """
+        Yields all ongoing move actions of a given module
+
+        Args:
+            file_uri (`str`): path to module
+
+        Returns:
+            `Generator[tuple[str, MoveSymbolSource], None, None]`:
+        """
         file_uri = file_uri.removeprefix("file://")
         for workspace, move in self.current_moves.items():
             if file_uri.startswith(workspace):
                 yield workspace, move
 
     def add_move(self, file_uri: str, move: MoveSymbolSource):
+        """
+        Start a move action
+
+        Args:
+            file_uri (`str`): path to source module
+            move (`MoveSymbolSource`): the move object
+        """
         file_uri = file_uri.removeprefix("file://")
         for workspace in self.configs:
             if file_uri.startswith(workspace):
                 self.current_moves[workspace] = move
 
     def del_move(self, file_uri: str) -> None:
+        """
+        Cancel a move
+
+        Args:
+            file_uri (`str`): Path to the source file
+        """
         file_uri = file_uri.removeprefix("file://")
         for workspace in self.configs:
             if file_uri.startswith(workspace) and workspace in self.current_moves:
                 del self.current_moves[workspace]
 
     def build_graph(self, workspace_uri: str) -> None:
+        """
+        Build dependency graph of the given folder
+
+        Args:
+            workspace_uri (`str`): path to folder
+        """
         if not workspace_uri.startswith("file://"):
             return
         workspace_uri = workspace_uri.removeprefix("file://")
         if workspace_uri not in self.configs:
             config = get_project_config(workspace_uri)
             self.configs[workspace_uri] = config
-            self.graphs[workspace_uri] = build_project_graph(config)
+            self.dependency_graphs[workspace_uri] = build_project_graph(config)
 
     def update_file_deps(self, file_uri: str) -> None:
+        """
+        Update the dependencies of a given file
+
+        Args:
+            file_uri (`str`): path to module
+        """
         if not file_uri.endswith(".py"):
             return
         if not file_uri.startswith("file://"):
             return
         file_uri = file_uri.removeprefix("file://")
         cst: None | libcst.Module = None
-        for workspace_uri, graph in self.graphs.items():
+        for workspace_uri, graph in self.dependency_graphs.items():
             if not file_uri.startswith(workspace_uri):
                 continue
             file_package = (
@@ -116,12 +144,22 @@ class RefactorServer(LanguageServer):
     def get_mods(
         self, file_uri: str
     ) -> Generator[tuple[str, Graph, Module], None, None]:
+        """
+        Yields the dependency graph and module dataclass of the given module
+        uri for each registered dependency graph the module is part of.
+
+        Args:
+            file_uri (`str`): module path
+
+        Returns:
+            `Generator[tuple[str, Graph, Module], None, None]`:
+        """
         if not file_uri.endswith(".py"):
             return None
         if not file_uri.startswith("file://"):
             return None
         file_uri = file_uri.removeprefix("file://")
-        for workspace_uri, graph in self.graphs.items():
+        for workspace_uri, graph in self.dependency_graphs.items():
             if not file_uri.startswith(workspace_uri):
                 continue
             file_package = (
@@ -171,7 +209,7 @@ def code_actions(params: CodeActionParams) -> list[CodeAction]:
                 ),
             ),
         ]
-        for move in server.get_moves(params.text_document.uri):
+        for _, move in server.get_ongoing_moves(params.text_document.uri):
             actions.append(
                 CodeAction(
                     title=f"Finish moving {move.symbol_name} here",
@@ -281,7 +319,7 @@ def finish_move_symbol_command(ls: LanguageServer, args):
     )
     LOGGER.debug("codeAction.finishMoveSymbol: %s", args)
     mods = {workspace: (graph, mod) for workspace, graph, mod in server.get_mods(uri)}
-    for workspace, move in server.get_workspace_moves(uri):
+    for workspace, move in server.get_ongoing_moves(uri):
         if workspace not in mods:
             continue
         graph, mod = mods[workspace]

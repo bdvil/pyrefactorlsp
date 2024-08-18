@@ -113,6 +113,15 @@ def add_edges_to_graph(graph: Graph):
 
 
 def build_project_graph(config: Config) -> Graph:
+    """
+    Build dependency graph of a project
+
+    Args:
+        config (`Config`):
+
+    Returns:
+        `Graph`:
+    """
     root = Path(config.root)
     graph: Graph = Graph()
     if config.folders is not None:
