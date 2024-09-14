@@ -30,6 +30,13 @@ check_untyped_defs = true
 [tool.pyrefactor]
 folders = ["pyrefactorlsp"]
 
+[tool.uv]
+dev-dependencies = [
+    "mypy>=1.11.2",
+    "pytest>=8.3.3",
+    "types-pyyaml>=6.0.12.20240808",
+]
+
 [project.scripts]
 prlsp = "pyrefactorlsp.lsp:root"
 
