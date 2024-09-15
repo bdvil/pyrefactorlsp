@@ -9,8 +9,15 @@ here = Path(__file__).parent
 expected_graph_edges = {
     ("sample_project.mod1", "sample_project.pkg.mod2"),
     ("sample_project.mod1", "sample_project.__init__"),
+    ("sample_project.mod1", "sample_project.mod4"),
     ("sample_project.pkg.mod2", "sample_project.pkg.subpkg.mod3"),
     ("sample_project.pkg.mod2", "sample_project.mod4"),
+    ("sample_project.mod1_2", "sample_project.__init__"),
+    ("sample_project.mod1_2", "sample_project.mod4"),
+    ("sample_project.mod1_2", "sample_project.pkg.mod2"),
+    ("sample_project.mod1_3", "sample_project.__init__"),
+    ("sample_project.mod1_3", "sample_project.mod4"),
+    ("sample_project.mod1_3", "sample_project.pkg.mod2"),
 }
 
 

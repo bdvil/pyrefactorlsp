@@ -4,7 +4,6 @@ import libcst
 from libcst import (
     Attribute,
     ClassDef,
-    CSTNode,
     CSTTransformer,
     FunctionDef,
     MetadataWrapper,
@@ -27,6 +26,12 @@ def get_attr_base(node: Attribute) -> str:
     raise ValueError("value Not an Attribute or Name")
 
 
+@dataclass(frozen=True, eq=True)
+class ImportPath:
+    path: str
+    alias: str | None = None
+
+
 class RemoveSymbolFromSource(CSTTransformer):
     METADATA_DEPENDENCIES = (PositionProvider, QualifiedNameProvider)
 
@@ -37,7 +42,7 @@ class RemoveSymbolFromSource(CSTTransformer):
         self._is_inside_symbol = False
         self.symbol: FunctionDef | ClassDef | SimpleStatementLine | None = None
         self.symbol_name: str | None = None
-        self.needed_imports: set[str] = set()
+        self.needed_imports: set[ImportPath] = set()
 
     def _is_in_range(self, code_range: CodeRange | None):
         """Checks whether the code_range is in given line and cols.
@@ -135,12 +140,15 @@ class RemoveSymbolFromSource(CSTTransformer):
             return True
         for name in qualified_names:
             if name.source == QualifiedNameSource.IMPORT:
+                alias: str | None = None
                 if isinstance(node, Attribute):
-                    componenents = name.name.split(".")
-                    k = componenents.index(get_attr_base(node))
-                    self.needed_imports.add(".".join(componenents[: k + 1]))
+                    if not name.name.endswith(node.attr.value):
+                        alias = node.attr.value
+                    self.needed_imports.add(ImportPath(name.name, alias))
                 else:
-                    self.needed_imports.add(name.name)
+                    if not name.name.endswith(node.value):
+                        alias = node.value
+                    self.needed_imports.add(ImportPath(name.name, alias))
             elif (
                 name.source == QualifiedNameSource.LOCAL
                 and name.name != self.symbol_name
@@ -149,7 +157,7 @@ class RemoveSymbolFromSource(CSTTransformer):
                 # Do not include local defs
                 if parts[0] == self.symbol_name:
                     continue
-                self.needed_imports.add(f"<local>.{parts[0]}")
+                self.needed_imports.add(ImportPath(f"<local>.{parts[0]}"))
         return False
 
     def visit_Name(self, node: Name) -> bool:
@@ -165,7 +173,7 @@ class RemoveSymbolFromSource(CSTTransformer):
 
 @dataclass
 class MoveSymbolSource:
-    needed_imports: frozenset[str]
+    needed_imports: frozenset[ImportPath]
     symbol: FunctionDef | ClassDef | SimpleStatementLine | None
     symbol_name: str | None
     updated_source: libcst.Module
@@ -194,7 +202,7 @@ def move_symbol_source(source: Module, line: int, col: int) -> MoveSymbolSource:
 
     needed_imports = frozenset(
         {
-            import_.replace("<local>", local_mod)
+            ImportPath(import_.path.replace("<local>", local_mod), import_.alias)
             for import_ in symbol_remover.needed_imports
         }
     )

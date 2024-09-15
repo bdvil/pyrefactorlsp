@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from pyrefactorlsp.refactor.actions.move_symbol_source import move_symbol_source
+from pyrefactorlsp.refactor.actions.move_symbol_source import (
+    ImportPath,
+    move_symbol_source,
+)
 from pyrefactorlsp.refactor.graph import build_project_graph
 from pyrefactorlsp.refactor.load import get_project_config
 
@@ -11,7 +14,7 @@ def test_remove_symbol():
     config = get_project_config(here / "sample_project")
     graph = build_project_graph(config)
 
-    lineno = 9
+    lineno = 13
     colno = 3
 
     for node in graph.nodes:
@@ -21,8 +24,8 @@ def test_remove_symbol():
         assert moved_symbol.symbol is not None
         assert moved_symbol.symbol_name == "test_func"
         expected_needed_imports = {
-            "sample_project.pkg.mod2.T",
-            "sample_project.a",
-            "sample_project.mod1.y",
+            ImportPath("sample_project.pkg.mod2.T", None),
+            ImportPath("sample_project.a", "aa"),
+            ImportPath("sample_project.mod1.y", None),
         }
         assert moved_symbol.needed_imports == expected_needed_imports

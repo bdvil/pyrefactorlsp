@@ -3,6 +3,7 @@ from typing import Union
 
 import libcst.matchers as m
 from libcst import (
+    AsName,
     Attribute,
     BaseCompoundStatement,
     ClassDef,
@@ -28,7 +29,10 @@ from libcst.metadata import (
     QualifiedNameSource,
 )
 
-from pyrefactorlsp.refactor.actions.move_symbol_source import MoveSymbolSource
+from pyrefactorlsp.refactor.actions.move_symbol_source import (
+    ImportPath,
+    MoveSymbolSource,
+)
 from pyrefactorlsp.refactor.graph import Graph
 from pyrefactorlsp.refactor.imports import get_module_name
 from pyrefactorlsp.refactor.module import Module
@@ -73,7 +77,7 @@ class ReplaceImports(CSTTransformer):
     def __init__(
         self,
         replace_imports: Mapping[str, str],
-        add_imports: Iterable[str] | None = None,
+        add_imports: Iterable[ImportPath] | None = None,
         remove_imports: Iterable[str] | None = None,
     ):
         self.imported_symbols: set[str] = set()
@@ -102,20 +106,23 @@ class ReplaceImports(CSTTransformer):
 
         if add_imports is not None:
             for add_import in add_imports:
-                module, _, obj = add_import.rpartition(".")
-                self._add_import(module, obj)
+                module, _, obj = add_import.path.rpartition(".")
+                self._add_import(module, obj, add_import.alias)
         if remove_imports is not None:
             for remove_import in remove_imports:
                 module, _, obj = remove_import.rpartition(".")
                 self._remove_import(module, obj)
 
-    def _add_import(self, module: str, obj: str):
+    def _add_import(self, module: str, obj: str, alias: str | None = None):
         obj_key = frozenset([obj])
         if obj_key in self._imports_to_add:
             return
+        asname: None | AsName = None
+        if alias is not None:
+            asname = AsName(Name(alias))
         self._imports_to_add[obj_key] = ImportFrom(
             module=seq_to_attr(module.split(".")),
-            names=[ImportAlias(name=Name(value=obj))],
+            names=[ImportAlias(name=Name(value=obj), asname=asname)],
         )
 
     def _remove_import(self, module: str, obj: str):
@@ -303,7 +310,7 @@ def move_symbol_target(
     edited_modules = [move_source.source_mod, target]
 
     for new_dep in move_source.needed_imports:
-        new_dep_pkg, _, _ = new_dep.rpartition(".")
+        new_dep_pkg, _, _ = new_dep.path.rpartition(".")
         new_dep_mod = graph.node_from_path(new_dep_pkg)
         if new_dep_mod is None:
             continue
