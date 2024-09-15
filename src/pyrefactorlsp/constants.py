@@ -10,9 +10,9 @@ handler.setLevel(LOGGING_LEVEL)
 LOGGER.setLevel(LOGGING_LEVEL)
 LOGGER.addHandler(handler)
 
-handler = logging.StreamHandler()
-handler.setLevel(LOGGING_LEVEL)
-LOGGER.addHandler(handler)
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(LOGGING_LEVEL)
+LOGGER.addHandler(stream_handler)
 
 
 __all__ = [
