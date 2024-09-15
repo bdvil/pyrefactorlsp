@@ -1,7 +1,7 @@
 # Python LSP for Refactoring
 
 > [!WARNING]
-> This is still highly experimental and it does not fully works yet.
+> This is still highly experimental and it does not fully work yet.
 
 
 ## Test the project and contributing
