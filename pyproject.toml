@@ -28,7 +28,7 @@ install_types = true
 check_untyped_defs = true
 
 [tool.pyrefactor]
-folders = ["pyrefactorlsp"]
+folders = ["src"]
 
 [tool.uv]
 dev-dependencies = [
